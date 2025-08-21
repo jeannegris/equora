@@ -123,7 +123,8 @@ async def send_custom_email(email: EmailRequest):
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=["*"],  # Liberado para qualquer origem
+    # Permitir apenas a origem do site público (evita usar '*')
+    allow_origins=["http://140.238.187.229"],
     allow_methods=["*"],
     allow_headers=["*"],
 )

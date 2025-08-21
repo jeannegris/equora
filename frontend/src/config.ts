@@ -1,5 +1,6 @@
 // Configurações globais da aplicação
 
-export const BACKEND_URL = "http://140.238.187.229:8000";
+// Usar caminho relativo para que as requisições sejam same-origin via NGINX
+export const BACKEND_URL = "";
 
-// Futuramente, basta alterar o valor acima para o IP externo ou usar variáveis de ambiente
+// Se necessário, defina a URL completa em tempo de build ou variáveis de ambiente
