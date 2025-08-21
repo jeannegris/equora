@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import AdminLogin from './AdminLoginNew';
+import AdminLogin from './AdminLogin';
 import AdminPanel from './AdminPanel';
 import Admin2FASetup from './Admin2FASetup';
 
