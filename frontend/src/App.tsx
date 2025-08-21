@@ -17,23 +17,26 @@ function App() {
 
   useEffect(() => {
     // Enviar estatística de acesso sempre que a aplicação montar
+    // Evitar chamadas a serviços externos (api.ipify.org) — o backend extrai o IP do request.
     try {
       const path = window.location.pathname || '';
       // evitar postar quando estivermos no painel /equora/admin (o AdminStatistics já faz o post)
       if (path.startsWith('/equora/admin')) return;
-    } catch (e) {
-      // se window não existir por algum motivo, continuar e tentar postar
-    }
 
-    fetch('https://api.ipify.org?format=json')
-      .then(res => res.json())
-      .then(({ ip }) => {
-        fetch(`${BACKEND_URL}/api/admin/stats/access`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ip })
-        }).catch(() => {});
+      // Post direto ao backend; backend fará fallback para extrair o IP quando necessário.
+      fetch(`${BACKEND_URL}/api/admin/stats/access`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path })
       }).catch(() => {});
+    } catch (e) {
+      // se window não existir por algum motivo, tentar postar sem path
+      fetch(`${BACKEND_URL}/api/admin/stats/access`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      }).catch(() => {});
+    }
   }, []);
 
   return (

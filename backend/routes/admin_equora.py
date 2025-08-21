@@ -45,6 +45,7 @@ SESSION_EXPIRE_MINUTES = 30
 
 class AccessIn(BaseModel):
     ip: Optional[str] = None
+    path: Optional[str] = None
 
 
 @router.get("/stats/access")
@@ -131,6 +132,9 @@ async def create_access_stat(access: AccessIn, request: Request):
             ip = client.host if client else None
 
     doc = {"ip": ip, "timestamp": datetime.utcnow()}
+    # salvar caminho da página quando enviado pelo frontend (opcional)
+    if getattr(access, 'path', None):
+        doc["path"] = access.path
     # tentativa simples de lookup geoip se banco local estiver presente (opcional)
     try:
         # inserir sem bloquear caso geoip não esteja configurado
@@ -141,10 +145,12 @@ async def create_access_stat(access: AccessIn, request: Request):
             reader_path = os.path.abspath(os.path.join(this_dir, '..', 'GeoLite2-City.mmdb'))
         if reader_path and os.path.exists(reader_path):
             try:
-                with geoip2.database.Reader(reader_path) as reader:
-                    r = reader.city(access.ip)
-                    loc = {"country": r.country.name, "city": r.city.name, "latitude": r.location.latitude, "longitude": r.location.longitude}
-                    doc["location"] = loc
+                # somente tentar lookup se tivermos um IP
+                if ip:
+                    with geoip2.database.Reader(reader_path) as reader:
+                        r = reader.city(ip)
+                        loc = {"country": r.country.name, "city": r.city.name, "latitude": r.location.latitude, "longitude": r.location.longitude}
+                        doc["location"] = loc
             except Exception:
                 pass
     except Exception:
