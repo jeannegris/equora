@@ -5,7 +5,7 @@ import os
 import uuid
 import secrets
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 import io
 import base64
@@ -108,10 +108,22 @@ async def list_access_stats(start: Optional[str] = None, end: Optional[str] = No
                     "latitude": lat,
                     "longitude": lon
                 }
+
+        # garantir que retornamos ISO com info de timezone (converter naive -> UTC)
+        ts = doc.get("timestamp")
+        ts_iso = None
+        if ts:
+            try:
+                if getattr(ts, 'tzinfo', None) is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+                ts_iso = ts.isoformat()
+            except Exception:
+                ts_iso = None
+
         results.append({
             "ip": doc.get("ip"),
             "location": norm_loc,
-            "timestamp": doc.get("timestamp").isoformat() if doc.get("timestamp") else None
+            "timestamp": ts_iso
         })
     return results
 
