@@ -23,11 +23,14 @@ async def create_admin_user():
         "password_hash": password_hash,
         "is_active": True,
         "is_admin": True,
-        "twofa_secret": "123456",
+        # Não habilitar 2FA por padrão ao criar o usuário inicial
+        "twofa_secret": None,
+        "provisioning_uri": None,
+        "provisioning_uri_used": False,
         "created_at": datetime.utcnow()
     }
     await db_equora.users.insert_one(user)
-    print(f"Usuário admin criado! Usuário: {username} | Senha: {password} | 2FA: 123456")
+    print(f"Usuário admin criado! Usuário: {username} | Senha: {password} | 2FA: desabilitado")
 
 if __name__ == "__main__":
     asyncio.run(create_admin_user())
