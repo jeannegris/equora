@@ -44,7 +44,7 @@ SESSION_EXPIRE_MINUTES = 30
 
 
 class AccessIn(BaseModel):
-    ip: str
+    ip: Optional[str] = None
 
 
 @router.get("/stats/access")
@@ -116,9 +116,21 @@ async def list_access_stats(start: Optional[str] = None, end: Optional[str] = No
 
 
 @router.post("/stats/access", status_code=201)
-async def create_access_stat(access: AccessIn):
-    """Insere um registro simples de acesso. O frontend envia apenas o IP."""
-    doc = {"ip": access.ip, "timestamp": datetime.utcnow()}
+async def create_access_stat(access: AccessIn, request: Request):
+    """Insere um registro simples de acesso. O frontend pode enviar o IP,
+    ou o backend tentará extrair do header X-Forwarded-For ou do socket."""
+    # Preferir IP enviado pelo frontend, senão tentar cabeçalhos reverso-proxy e por fim request.client
+    ip = access.ip
+    if not ip:
+        xff = request.headers.get("x-forwarded-for")
+        if xff:
+            # pode conter lista: primeiro é o original
+            ip = xff.split(",")[0].strip()
+        else:
+            client = request.client
+            ip = client.host if client else None
+
+    doc = {"ip": ip, "timestamp": datetime.utcnow()}
     # tentativa simples de lookup geoip se banco local estiver presente (opcional)
     try:
         # inserir sem bloquear caso geoip não esteja configurado
