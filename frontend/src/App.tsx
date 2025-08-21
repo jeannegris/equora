@@ -17,6 +17,14 @@ function App() {
 
   useEffect(() => {
     // Enviar estatística de acesso sempre que a aplicação montar
+    try {
+      const path = window.location.pathname || '';
+      // evitar postar quando estivermos no painel /equora/admin (o AdminStatistics já faz o post)
+      if (path.startsWith('/equora/admin')) return;
+    } catch (e) {
+      // se window não existir por algum motivo, continuar e tentar postar
+    }
+
     fetch('https://api.ipify.org?format=json')
       .then(res => res.json())
       .then(({ ip }) => {
