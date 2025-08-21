@@ -26,12 +26,137 @@ from backend.schemas.schemas_equora import (
     ClientCreate, ClientOut, UserUpdate
 )
 
+
+
+
 # -------------------------------------------------------------------
 # Configurações de sessão
 # -------------------------------------------------------------------
 router = APIRouter(prefix="/admin", tags=["Painel Admin Equora"])
 SESSION_COOKIE_NAME = "equora_session"
 SESSION_EXPIRE_MINUTES = 30
+
+# -------------------------------------------------------------------
+# Estatísticas de Acesso (rota usada pelo frontend AdminStatistics)
+# Coleção: stats_access
+# Campos esperados: { ip: str, location?: {country, city, latitude, longitude}, timestamp: datetime }
+# -------------------------------------------------------------------
+
+
+class AccessIn(BaseModel):
+    ip: str
+
+
+@router.get("/stats/access")
+async def list_access_stats(start: Optional[str] = None, end: Optional[str] = None):
+    """Retorna acessos salvos (opcional filtro por intervalo ISO date yyyy-mm-dd)."""
+    query = {}
+    if start or end:
+        # converter strings para datetimes simples (com hora 00:00) para filtrar
+        try:
+            if start:
+                start_dt = datetime.fromisoformat(start)
+            else:
+                start_dt = None
+            if end:
+                end_dt = datetime.fromisoformat(end)
+            else:
+                end_dt = None
+        except Exception:
+            raise HTTPException(status_code=400, detail="Formato de data inválido. Use ISO yyyy-mm-dd or full datetime")
+
+        if start_dt and end_dt:
+            query["timestamp"] = {"$gte": start_dt, "$lte": end_dt}
+        elif start_dt:
+            query["timestamp"] = {"$gte": start_dt}
+        elif end_dt:
+            query["timestamp"] = {"$lte": end_dt}
+
+    cursor = db_equora["stats_access"].find(query).sort("timestamp", -1).limit(1000)
+    results = []
+    async for doc in cursor:
+        # normalizar retorno para o frontend
+        loc = doc.get("location")
+        norm_loc = None
+        if loc and isinstance(loc, dict):
+            # aceitar várias formas de chaves e converter strings para números
+            lat = None
+            lon = None
+            if "latitude" in loc:
+                lat = loc.get("latitude")
+            elif "lat" in loc:
+                lat = loc.get("lat")
+            if "longitude" in loc:
+                lon = loc.get("longitude")
+            elif "lng" in loc:
+                lon = loc.get("lng")
+
+            try:
+                if isinstance(lat, str):
+                    lat = float(lat)
+                if isinstance(lon, str):
+                    lon = float(lon)
+            except Exception:
+                lat = None
+                lon = None
+
+            if isinstance(lat, (int, float)) and isinstance(lon, (int, float)):
+                norm_loc = {
+                    "country": loc.get("country"),
+                    "city": loc.get("city"),
+                    "latitude": lat,
+                    "longitude": lon
+                }
+        results.append({
+            "ip": doc.get("ip"),
+            "location": norm_loc,
+            "timestamp": doc.get("timestamp").isoformat() if doc.get("timestamp") else None
+        })
+    return results
+
+
+@router.post("/stats/access", status_code=201)
+async def create_access_stat(access: AccessIn):
+    """Insere um registro simples de acesso. O frontend envia apenas o IP."""
+    doc = {"ip": access.ip, "timestamp": datetime.utcnow()}
+    # tentativa simples de lookup geoip se banco local estiver presente (opcional)
+    try:
+        # inserir sem bloquear caso geoip não esteja configurado
+        reader_path = os.getenv("GEOIP_DB_PATH")
+        if not reader_path:
+            # tentar fallback relativo ao diretório backend
+            this_dir = os.path.dirname(__file__)
+            reader_path = os.path.abspath(os.path.join(this_dir, '..', 'GeoLite2-City.mmdb'))
+        if reader_path and os.path.exists(reader_path):
+            try:
+                with geoip2.database.Reader(reader_path) as reader:
+                    r = reader.city(access.ip)
+                    loc = {"country": r.country.name, "city": r.city.name, "latitude": r.location.latitude, "longitude": r.location.longitude}
+                    doc["location"] = loc
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    await db_equora["stats_access"].insert_one(doc)
+    return {"result": "ok"}
+
+
+@router.delete("/stats/access")
+async def clear_access_stats(request: Request):
+    """Limpa todos os registros de acesso — requer sessão de admin."""
+    session_id = request.cookies.get(SESSION_COOKIE_NAME)
+    if not session_id:
+        raise HTTPException(status_code=401, detail="Não autenticado")
+    user_id = await verify_session(session_id)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Sessão inválida")
+    user = await db_equora.users.find_one({"id": user_id})
+    if not user or not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Apenas administradores podem limpar estatísticas")
+    await db_equora["stats_access"].delete_many({})
+    return {"result": "cleared"}
+
 
 # -------------------------------------------------------------------
 # Helpers
