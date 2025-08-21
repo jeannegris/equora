@@ -7,7 +7,8 @@ from pymongo import MongoClient
 import geoip2.database
 
 MONGO_URL = os.environ.get("MONGO_URL", "mongodb://localhost:27017")
-MMDB_PATH = os.environ.get("GEOIP_DB_PATH") or os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'GeoLite2-City.mmdb'))
+# Fallback para o arquivo mmdb no mesmo diretório 'backend'
+MMDB_PATH = os.environ.get("GEOIP_DB_PATH") or os.path.abspath(os.path.join(os.path.dirname(__file__), 'GeoLite2-City.mmdb'))
 
 client = MongoClient(MONGO_URL)
 db = client['equora']
