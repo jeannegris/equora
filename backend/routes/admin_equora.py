@@ -52,7 +52,9 @@ async def verify_session(session_id: str):
     return session["user_id"]
 
 # Token temporário para login 2FA
-temp_tokens = {}
+# Nota: não usar armazenamento em memória para temp tokens quando backend
+# roda em múltiplas instâncias (pm2, cluster). Usaremos a coleção MongoDB
+# `temp_tokens` para prover consistência entre processos.
 
 # -------------------------------------------------------------------
 # Usuários
@@ -181,7 +183,8 @@ async def login_password(data: UserPasswordLogin):
 
     if user.get("twofa_secret"):
         temp_token = secrets.token_urlsafe(32)
-        temp_tokens[temp_token] = {"user_id": user["id"], "expire": datetime.utcnow() + timedelta(minutes=5)}
+        expire = datetime.utcnow() + timedelta(minutes=5)
+        db_equora.temp_tokens.insert_one({"token": temp_token, "user_id": user["id"], "expire": expire})
         needs_setup = not user.get("provisioning_uri_used", False)
         provisioning_uri = user.get("provisioning_uri") if needs_setup else None
         return {"2fa_required": True, "temp_token": temp_token, "provisioning_uri": provisioning_uri}
@@ -193,7 +196,7 @@ async def login_password(data: UserPasswordLogin):
 
 @router.post("/login/2fa")
 async def login_2fa(data: User2FALogin, response: Response):
-    token_info = temp_tokens.get(data.temp_token)
+    token_info = await db_equora.temp_tokens.find_one({"token": data.temp_token})
     if not token_info or token_info["expire"] < datetime.utcnow():
         raise HTTPException(status_code=401, detail="Token temporário inválido ou expirado")
 
@@ -208,7 +211,7 @@ async def login_2fa(data: User2FALogin, response: Response):
     if not user.get("provisioning_uri_used", False):
         await db_equora.users.update_one({"id": user["id"]}, {"$set": {"provisioning_uri_used": True}})
 
-    del temp_tokens[data.temp_token]
+    await db_equora.temp_tokens.delete_one({"token": data.temp_token})
     session_id = create_session(user["id"])
     response.set_cookie(key=SESSION_COOKIE_NAME, value=session_id, httponly=True, max_age=SESSION_EXPIRE_MINUTES*60)
     return {"message": "Login realizado", "user": UserOut(**user).dict()}
@@ -241,4 +244,4 @@ async def list_clients(request: Request):
     user_id = await verify_session(session_id)
     if not user_id:
         raise HTTPException(status_code=401, detail="Não autenticado")
-   
+
