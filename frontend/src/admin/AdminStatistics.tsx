@@ -44,24 +44,16 @@ const AdminStatistics: React.FC = () => {
   };
 
   useEffect(() => {
-    const hasSentStat = sessionStorage.getItem('hasSentStat');
-
-    if (!hasSentStat) {
-      // Coletar IP do usuário
-      fetch('https://api.ipify.org?format=json')
-        .then(res => res.json())
-        .then(({ ip }) => {
-          // Enviar acesso para o backend
-          fetch(`${BACKEND_URL}/api/admin/stats/access`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ip })
-          }).then(() => {
-            // Marcar que a estatística foi enviada nesta sessão
-            sessionStorage.setItem('hasSentStat', 'true');
-          });
-        });
-    }
+    // Coletar IP do usuário e enviar sempre que o AdminStatistics montar
+    fetch('https://api.ipify.org?format=json')
+      .then(res => res.json())
+      .then(({ ip }) => {
+        fetch(`${BACKEND_URL}/api/admin/stats/access`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ip })
+        }).catch(() => {});
+      }).catch(() => {});
     fetchStats();
   }, []);
 
